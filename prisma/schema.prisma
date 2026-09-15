@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ContentType {
+  POST
+  REEL
+  STORY
+  SHORT
+  VIDEO
+  OTHER
+}
+
+enum Platform {
+  INSTAGRAM
+  FACEBOOK
+  YOUTUBE
+  LINKEDIN
+  X
+  THREADS
+}
+
+enum ApprovalStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+enum PublishingStatus {
+  NOT_SCHEDULED
+  SCHEDULED
+  POSTED
+  NOT_POSTED
+  CANCELLED
+  POSTPONED
+}
+
+enum ApprovalAction {
+  APPROVE
+  REQUEST_CHANGES
+}
+
+enum NotificationType {
+  INFO
+  APPROVAL_REQUIRED
+  APPROVED
+  CHANGES_REQUESTED
+  PUBLISHED
+}
+
+model Organization {
+  id            String             @id @default(cuid())
+  name          String
+  slug          String             @unique
+  contactEmail  String?
+  contactPhone  String?
+  logoUrl       String?
+  timezone      String             @default("Asia/Kolkata")
+  status        OrganizationStatus @default(ACTIVE)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  users         User[]
+  contents      Content[]
+  approvals     Approval[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+
+  @@index([status])
+  @@index([slug])
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  name           String
+  role           Role         @default(CLIENT)
+  status         UserStatus   @default(ACTIVE)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  lastLoginAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  sessions        Session[]
+  createdContents Content[]     @relation("CreatedContents")
+  captionEdits    CaptionVersion[] @relation("CaptionEdits")
+  approvalActions Approval[]    @relation("ApprovalEvents")
+  activityLogs    ActivityLog[]
+
+  @@index([email])
+  @@index([organizationId])
+  @@index([role, status])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  userAgent    String?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([expiresAt])
+}
+
+model Content {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title            String
+  contentType      ContentType      @default(POST)
+  scheduledAt      DateTime
+  driveUrl         String?
+  caption          String?          @db.Text
+  approvalStatus   ApprovalStatus   @default(DRAFT)
+  publishingStatus PublishingStatus @default(NOT_SCHEDULED)
+  postedUrl        String?
+  archivedAt       DateTime?
+  createdById      String
+  createdBy        User             @relation("CreatedContents", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  platforms       ContentPlatform[]
+  captionVersions CaptionVersion[]
+  approvals       Approval[]
+  notifications   Notification[]
+
+  @@index([organizationId, scheduledAt])
+  @@index([organizationId, approvalStatus])
+  @@index([organizationId, publishingStatus])
+  @@index([organizationId, archivedAt])
+  @@index([contentType])
+}
+
+model ContentPlatform {
+  id        String   @id @default(cuid())
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  platform  Platform
+  createdAt DateTime @default(now())
+
+  @@unique([contentId, platform])
+  @@index([platform])
+}
+
+model CaptionVersion {
+  id            String   @id @default(cuid())
+  contentId     String
+  content       Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  caption       String   @db.Text
+  editedById    String
+  editedBy      User     @relation("CaptionEdits", fields: [editedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now())
+
+  @@unique([contentId, versionNumber])
+  @@index([contentId])
+}
+
+model Approval {
+  id             String         @id @default(cuid())
+  contentId      String
+  content        Content        @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User           @relation("ApprovalEvents", fields: [userId], references: [id], onDelete: Restrict)
+  action         ApprovalAction
+  notes          String?        @db.Text
+  createdAt      DateTime       @default(now())
+
+  @@index([contentId, createdAt])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  title          String
+  message        String
+  type           NotificationType @default(INFO)
+  contentId      String?
+  content        Content?         @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, isRead])
+  @@index([userId, isRead])
+}
+
+model ActivityLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String
+  actor          User         @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([actorId])
+  @@index([entityType, entityId])
+}
