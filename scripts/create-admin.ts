@@ -61,6 +61,14 @@ async function main() {
   let email = process.env.ADMIN_EMAIL?.trim();
   let password = process.env.ADMIN_PASSWORD?.trim();
 
+  if (!email || !password) {
+    if (!process.stdin.isTTY) {
+      console.log("ℹ️  Non-interactive environment detected and ADMIN_EMAIL / ADMIN_PASSWORD not set.");
+      console.log("   Skipping admin creation. You can set ADMIN_EMAIL and ADMIN_PASSWORD in Render Environment variables.\n");
+      process.exit(0);
+    }
+  }
+
   if (!email) {
     email = await prompt("Enter Admin Email: ");
   }
