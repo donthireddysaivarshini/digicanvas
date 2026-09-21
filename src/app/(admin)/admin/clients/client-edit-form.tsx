@@ -4,7 +4,8 @@ import * as React from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { updateClientAction, ActionState } from "./actions";
+import { updateClientAction, resetClientPasswordAction, ActionState } from "./actions";
+import { ResetPasswordResult } from "@/lib/services/client-service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,11 @@ import {
   User,
   AlertCircle,
   CheckCircle2,
+  Key,
+  Copy,
+  Check,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import { OrganizationStatus } from "@prisma/client";
 
@@ -63,12 +69,47 @@ export function ClientEditForm({ client }: ClientEditFormProps) {
   const router = useRouter();
   const [state, formAction] = useFormState<ActionState, FormData>(updateClientAction, {});
 
+  // Password reset state
+  const [isResettingPassword, startResetPassword] = React.useTransition();
+  const [resetResult, setResetResult] = React.useState<ResetPasswordResult | null>(null);
+  const [resetError, setResetError] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+
   React.useEffect(() => {
     if (state.success) {
       router.push("/admin/clients");
       router.refresh();
     }
   }, [state.success, router]);
+
+  const handleGenerateNewPassword = () => {
+    if (
+      !window.confirm(
+        `Are you sure you want to generate a new password for "${client.name}"?\n\nExisting active sessions for this client will be immediately revoked.`
+      )
+    ) {
+      return;
+    }
+
+    startResetPassword(async () => {
+      setResetError(null);
+      setResetResult(null);
+      const res = await resetClientPasswordAction(client.id);
+      if (res.success && res.data) {
+        setResetResult(res.data);
+      } else {
+        setResetError(res.error || "Failed to generate new password.");
+      }
+    });
+  };
+
+  const handleCopyCredentials = () => {
+    if (!resetResult) return;
+    const textToCopy = `DigiCanvas Client Login:\nPortal URL: ${window.location.origin}/login\nEmail: ${resetResult.user.email}\nTemporary Password: ${resetResult.temporaryPassword}`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
 
   return (
     <form action={formAction} className="space-y-6 max-w-2xl">
@@ -85,6 +126,83 @@ export function ClientEditForm({ client }: ClientEditFormProps) {
         <div className="flex items-center gap-2 p-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>Client organization updated successfully.</span>
+        </div>
+      )}
+
+      {/* One-Time Generated Password Card (Dismissible) */}
+      {resetResult && (
+        <Card className="border-amber-300 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20 shadow-md animate-in fade-in">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+              <Key className="h-5 w-5 text-amber-600" />
+              <CardTitle className="text-base font-bold">New Temporary Password Generated</CardTitle>
+            </div>
+            <button
+              type="button"
+              onClick={() => setResetResult(null)}
+              className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+              title="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-2 p-2.5 rounded bg-amber-100/70 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200 text-xs">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+              <span>
+                <strong>One-time visibility notice:</strong> This temporary password is only displayed right now and is <strong>never stored in plaintext</strong> or shown again after you dismiss this box.
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-zinc-900 text-zinc-100 font-mono text-xs space-y-1.5 border border-zinc-800">
+              <div className="flex justify-between py-0.5">
+                <span className="text-zinc-400">User Email:</span>
+                <span className="font-semibold text-emerald-400">{resetResult.user.email}</span>
+              </div>
+              <div className="flex justify-between py-0.5 items-center">
+                <span className="text-zinc-400">New Password:</span>
+                <span className="font-bold text-amber-400 bg-zinc-800 px-2 py-0.5 rounded text-sm select-all">
+                  {resetResult.temporaryPassword}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                onClick={handleCopyCredentials}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Copy New Credentials</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setResetResult(null)}
+                className="text-xs h-8"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {resetError && (
+        <div className="flex items-center gap-2 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md dark:bg-red-950/40 dark:text-red-400 dark:border-red-900">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{resetError}</span>
         </div>
       )}
 
@@ -194,14 +312,29 @@ export function ClientEditForm({ client }: ClientEditFormProps) {
         </CardContent>
       </Card>
 
-      {/* Associated Users (Read-only overview) */}
+      {/* Associated Users with Password Reset capability */}
       <Card className="border border-zinc-200 dark:border-zinc-800">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="h-4 w-4 text-zinc-500" />
-            Associated Client Users
-          </CardTitle>
-          <CardDescription>Accounts provisioned for this organization.</CardDescription>
+        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <User className="h-4 w-4 text-zinc-500" />
+              Associated Client Users
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Portal login credentials for this client organization.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateNewPassword}
+            isLoading={isResettingPassword}
+            className="text-xs h-8 flex items-center gap-1.5 border-zinc-300 dark:border-zinc-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+          >
+            <Key className="h-3.5 w-3.5 text-amber-600" />
+            <span>{isResettingPassword ? "Generating..." : "Generate New Password"}</span>
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="divide-y divide-zinc-200 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-md">

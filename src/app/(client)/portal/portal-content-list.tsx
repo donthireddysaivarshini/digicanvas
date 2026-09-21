@@ -28,6 +28,38 @@ interface PortalContentListProps {
   timezone: string;
 }
 
+function getApprovalBadge(status: string) {
+  switch (status) {
+    case "CHANGES_REQUESTED":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
+          Changes Requested
+        </span>
+      );
+    case "APPROVED":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+          Approved
+        </span>
+      );
+    case "AWAITING_APPROVAL":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+          Awaiting Approval
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700 border border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300">
+          Draft
+        </span>
+      );
+  }
+}
+
 export function PortalContentList({
   todayContent,
   upcomingContent,
@@ -78,18 +110,31 @@ export function PortalContentList({
                     <div
                       key={item.id}
                       onClick={() => setSelectedItem(item)}
-                      className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/70 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 cursor-pointer transition space-y-2"
+                      className="p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/70 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 cursor-pointer transition space-y-2.5"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] uppercase font-mono">
-                            {item.contentType}
-                          </Badge>
-                          <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
-                            {item.title}
-                          </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                              {item.contentType}
+                            </Badge>
+                            <span className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">
+                              {item.title}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {item.platforms.map((p) => (
+                              <span
+                                key={p.platform}
+                                className={`px-2 py-0.5 rounded text-[10px] font-medium border ${platformBadgeColors[p.platform]}`}
+                              >
+                                {p.platform}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1">
+
+                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1 shrink-0">
                           <Clock className="h-3.5 w-3.5 text-zinc-400" />
                           <span>{formatTimeInTimezone(item.scheduledAt, timezone)}</span>
                         </div>
@@ -99,16 +144,19 @@ export function PortalContentList({
                         <p className="text-xs text-zinc-500 line-clamp-2">{item.caption}</p>
                       )}
 
-                      <div className="flex items-center justify-between pt-1">
-                        <div className="flex flex-wrap gap-1">
-                          {item.platforms.map((p) => (
-                            <span
-                              key={p.platform}
-                              className={`px-2 py-0.5 rounded text-[10px] font-medium border ${platformBadgeColors[p.platform]}`}
-                            >
-                              {p.platform}
-                            </span>
-                          ))}
+                      {/* Prominent Status Line */}
+                      <div className="flex flex-wrap items-center justify-between pt-1 border-t border-zinc-200/60 dark:border-zinc-800/60 text-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-zinc-400 text-[11px]">Approval:</span>
+                            {getApprovalBadge(item.approvalStatus)}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-zinc-400 text-[11px]">Publishing:</span>
+                            <Badge variant="secondary" className="text-[10px] font-mono">
+                              {item.publishingStatus}
+                            </Badge>
+                          </div>
                         </div>
 
                         <span className="text-xs font-medium text-zinc-500 hover:text-zinc-900 flex items-center gap-1">
@@ -154,9 +202,9 @@ export function PortalContentList({
                     <div
                       key={item.id}
                       onClick={() => setSelectedItem(item)}
-                      className="p-3 rounded-lg border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 cursor-pointer transition flex items-center justify-between gap-3 text-xs"
+                      className="p-3.5 rounded-lg border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                     >
-                      <div className="space-y-1 min-w-0">
+                      <div className="space-y-1.5 min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="text-[9px] uppercase font-mono px-1.5 py-0">
                             {item.contentType}
@@ -165,15 +213,18 @@ export function PortalContentList({
                             {item.title}
                           </span>
                         </div>
-                        <div className="flex flex-wrap gap-1">
-                          {item.platforms.map((p) => (
-                            <span
-                              key={p.platform}
-                              className={`px-1.5 py-0.2 rounded text-[9px] font-medium border ${platformBadgeColors[p.platform]}`}
-                            >
-                              {p.platform}
-                            </span>
-                          ))}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap gap-1">
+                            {item.platforms.map((p) => (
+                              <span
+                                key={p.platform}
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-medium border ${platformBadgeColors[p.platform]}`}
+                              >
+                                {p.platform}
+                              </span>
+                            ))}
+                          </div>
+                          {getApprovalBadge(item.approvalStatus)}
                         </div>
                       </div>
 

@@ -125,9 +125,9 @@ export function ContentDetailModal({
     message: string;
   } | null>(null);
 
-  // Refresh content data when initialContent changes or modal opens
+  // Synchronize content data when modal is open and initialContent is provided
   React.useEffect(() => {
-    if (initialContent) {
+    if (isOpen && initialContent) {
       setContent(initialContent);
       setEditableCaption(initialContent.caption || "");
       setShowChangeRequestForm(false);
@@ -136,15 +136,20 @@ export function ContentDetailModal({
       setChangeNotesError("");
       setActionFeedback(null);
 
-      // Async fetch full latest details if relations aren't populated
-      getContentDetailsAction(initialContent.id).then((res) => {
-        if (res.success && res.data) {
-          setContent(res.data as ContentDetailItem);
-          setEditableCaption((res.data as ContentDetailItem).caption || "");
-        }
-      });
+      // Only fetch full relation details asynchronously if they are not already populated
+      const hasFullRelations =
+        Array.isArray(initialContent.captionVersions) && Array.isArray(initialContent.approvals);
+
+      if (!hasFullRelations) {
+        getContentDetailsAction(initialContent.id).then((res) => {
+          if (res.success && res.data) {
+            setContent(res.data as ContentDetailItem);
+            setEditableCaption((res.data as ContentDetailItem).caption || "");
+          }
+        });
+      }
     }
-  }, [initialContent, isOpen]);
+  }, [initialContent?.id, isOpen]);
 
   if (!isOpen || !content) return null;
 
@@ -334,20 +339,33 @@ export function ContentDetailModal({
         </div>
 
         {/* Active Change Request Highlight Box (if CHANGES_REQUESTED) */}
-        {content.approvalStatus === "CHANGES_REQUESTED" && latestChangeRequest?.notes && (
-          <div className="my-3 p-3.5 rounded-lg border border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/40 text-xs space-y-1">
+        {content.approvalStatus === "CHANGES_REQUESTED" && (
+          <div className="my-3 p-3.5 rounded-lg border border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/40 text-xs space-y-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-amber-900 dark:text-amber-200">
-              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
               <span>Requested Changes from Client</span>
             </div>
-            <p className="text-amber-800 dark:text-amber-300 leading-relaxed pl-5 whitespace-pre-wrap">
-              "{latestChangeRequest.notes}"
-            </p>
-            {latestChangeRequest.user && (
-              <span className="block text-[10px] text-amber-600/80 dark:text-amber-400/80 pl-5">
-                Requested by {latestChangeRequest.user.name} on{" "}
-                {formatDateInTimezone(latestChangeRequest.createdAt, timezone)}
+            {latestChangeRequest?.notes ? (
+              <p className="text-amber-800 dark:text-amber-300 leading-relaxed pl-5 whitespace-pre-wrap font-sans">
+                "{latestChangeRequest.notes}"
+              </p>
+            ) : (
+              <p className="text-amber-800 dark:text-amber-300 italic pl-5">
+                Client requested changes for this post.
+              </p>
+            )}
+            {latestChangeRequest && (
+              <span className="block text-[10px] text-amber-600/90 dark:text-amber-400/90 pl-5">
+                Requested{latestChangeRequest.user ? ` by ${latestChangeRequest.user.name}` : ""} on{" "}
+                {formatDateInTimezone(latestChangeRequest.createdAt, timezone)} at{" "}
+                {formatTimeInTimezone(latestChangeRequest.createdAt, timezone)}
               </span>
+            )}
+            {!isAdmin && (
+              <div className="mt-2 pt-2 border-t border-amber-200/80 dark:border-amber-900/60 text-[11px] font-medium text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>Changes have been requested and are waiting for the admin to update the content.</span>
+              </div>
             )}
           </div>
         )}
@@ -478,7 +496,7 @@ export function ContentDetailModal({
                   isLoading={isSavingCaption}
                   className="text-xs h-7 bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
-                  Save Caption
+                  {isSavingCaption ? "Saving..." : "Save Caption"}
                 </Button>
               </div>
             </div>
@@ -654,7 +672,7 @@ export function ContentDetailModal({
                 isLoading={isRequestingChanges}
                 className="text-xs h-8 bg-amber-600 hover:bg-amber-700 text-white font-medium"
               >
-                Submit Change Request
+                {isRequestingChanges ? "Submitting..." : "Submit Change Request"}
               </Button>
             </div>
           </form>
@@ -674,7 +692,7 @@ export function ContentDetailModal({
             {/* Client Approval Actions */}
             {!isAdmin && (
               <>
-                {content.approvalStatus !== "APPROVED" && (
+                {content.approvalStatus === "AWAITING_APPROVAL" && (
                   <>
                     {!showChangeRequestForm && (
                       <Button
@@ -695,9 +713,16 @@ export function ContentDetailModal({
                       className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                     >
                       <Check className="h-3.5 w-3.5 mr-1" />
-                      Approve Content
+                      {isApproving ? "Approving..." : "Approve Content"}
                     </Button>
                   </>
+                )}
+
+                {content.approvalStatus === "CHANGES_REQUESTED" && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 text-xs font-medium border border-amber-200 dark:border-amber-800">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    Waiting for Agency Revisions
+                  </span>
                 )}
 
                 {content.approvalStatus === "APPROVED" && (
@@ -706,13 +731,20 @@ export function ContentDetailModal({
                     Content Approved
                   </span>
                 )}
+
+                {content.approvalStatus === "DRAFT" && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 text-xs font-medium">
+                    <FileText className="h-4 w-4" />
+                    Draft (Under Preparation)
+                  </span>
+                )}
               </>
             )}
 
             {/* Admin Management Actions */}
             {isAdmin && (
               <>
-                {(content.approvalStatus === "DRAFT" || content.approvalStatus === "CHANGES_REQUESTED") && (
+                {content.approvalStatus === "DRAFT" && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -721,7 +753,19 @@ export function ContentDetailModal({
                     className="text-xs text-blue-600 hover:bg-blue-50 border-blue-200 dark:border-blue-900 dark:text-blue-400"
                   >
                     <Send className="h-3.5 w-3.5 mr-1" />
-                    Submit for Client Approval
+                    {isSubmittingApproval ? "Submitting..." : "Submit for Client Approval"}
+                  </Button>
+                )}
+
+                {content.approvalStatus === "CHANGES_REQUESTED" && (
+                  <Button
+                    size="sm"
+                    onClick={handleSubmitForApproval}
+                    isLoading={isSubmittingApproval}
+                    className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                  >
+                    <Send className="h-3.5 w-3.5 mr-1" />
+                    {isSubmittingApproval ? "Submitting..." : "Resubmit for Client Approval"}
                   </Button>
                 )}
 
@@ -740,7 +784,7 @@ export function ContentDetailModal({
                   className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700 border-zinc-200 dark:border-zinc-800 dark:text-red-400"
                 >
                   <Archive className="h-3.5 w-3.5 mr-1" />
-                  Archive
+                  {isArchiving ? "Archiving..." : "Archive"}
                 </Button>
               </>
             )}

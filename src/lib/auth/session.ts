@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import * as React from "react";
 import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { Role, UserStatus, OrganizationStatus } from "@prisma/client";
@@ -195,11 +196,15 @@ export async function validateSessionToken(
     return null;
   }
 }
+const cacheWrapper = typeof (React as unknown as { cache?: <T extends (...args: unknown[]) => unknown>(fn: T) => T }).cache === "function"
+  ? (React as unknown as { cache: <T extends (...args: unknown[]) => unknown>(fn: T) => T }).cache
+  : <T extends (...args: unknown[]) => unknown>(fn: T): T => fn;
 
 /**
  * Retrieves and validates the current active session from the HTTP-only cookie.
+ * Request-memoized using React cache() to prevent redundant DB roundtrips across layout/page/guards.
  */
-export async function getCurrentSession(): Promise<AuthenticatedSession | null> {
+export const getCurrentSession = cacheWrapper(async (): Promise<AuthenticatedSession | null> => {
   const cookieStore = cookies();
   const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -208,7 +213,7 @@ export async function getCurrentSession(): Promise<AuthenticatedSession | null> 
   }
 
   return validateSessionToken(sessionToken);
-}
+});
 
 /**
  * Logs out the current user by deleting their session from the database and clearing the cookie.

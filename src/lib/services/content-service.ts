@@ -139,6 +139,7 @@ export async function updateContent(input: UpdateContentInput, adminUserId: stri
   const trimmedNewCaption = input.caption?.trim() || "";
   const trimmedOldCaption = existing.caption?.trim() || "";
   const captionChanged = trimmedNewCaption !== trimmedOldCaption;
+  const driveUrlChanged = (input.driveUrl?.trim() || null) !== (existing.driveUrl?.trim() || null);
 
   await prisma.$transaction(async (tx) => {
     // 1. Update platforms: delete old relations and recreate new ones
@@ -180,7 +181,24 @@ export async function updateContent(input: UpdateContentInput, adminUserId: stri
       },
     });
 
-    // 4. Log update activity
+    // 4. Log creative updated if Drive link changed
+    if (driveUrlChanged) {
+      await tx.activityLog.create({
+        data: {
+          organizationId: existing.organizationId,
+          actorId: adminUserId,
+          action: "CREATIVE_UPDATED",
+          entityType: "CONTENT",
+          entityId: input.id,
+          metadata: {
+            title: input.title,
+            message: "Google Drive creative link changed",
+          },
+        },
+      });
+    }
+
+    // 5. Log general update activity
     await tx.activityLog.create({
       data: {
         organizationId: existing.organizationId,
@@ -191,6 +209,7 @@ export async function updateContent(input: UpdateContentInput, adminUserId: stri
         metadata: {
           title: input.title,
           captionChanged,
+          driveUrlChanged,
           scheduledAt: scheduledAt.toISOString(),
         },
       },

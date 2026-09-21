@@ -10,11 +10,13 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
     "test:phase0": "tsx scripts/test-phase0.ts",
     "test:phase1": "tsx scripts/test-phase1.ts",
     "test:phase2": "tsx scripts/test-phase2.ts",
     "test:phase3": "tsx scripts/test-phase3.ts",
-    "test:phase4": "tsx scripts/test-phase4.ts"
+    "test:phase4": "tsx scripts/test-phase4.ts",
+    "test:corrections": "tsx scripts/test-corrections.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

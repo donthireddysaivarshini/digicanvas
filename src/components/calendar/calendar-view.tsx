@@ -424,9 +424,21 @@ export function CalendarView({
                           e.stopPropagation();
                           setSelectedItem(item);
                         }}
-                        className="p-1 rounded text-[11px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition border border-zinc-200/60 dark:border-zinc-700/60 truncate"
+                        className="p-1 rounded text-[11px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition border border-zinc-200/60 dark:border-zinc-700/60 flex items-center gap-1 truncate"
                       >
-                        <span className="font-semibold mr-1">
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                            item.approvalStatus === "CHANGES_REQUESTED"
+                              ? "bg-red-500"
+                              : item.approvalStatus === "APPROVED"
+                              ? "bg-emerald-500"
+                              : item.approvalStatus === "AWAITING_APPROVAL"
+                              ? "bg-amber-500"
+                              : "bg-zinc-400"
+                          }`}
+                          title={`Approval: ${item.approvalStatus}`}
+                        />
+                        <span className="font-semibold text-[10px] shrink-0">
                           [{item.platforms[0]?.platform || item.contentType}]
                         </span>
                         <span className="truncate">{item.title}</span>
@@ -494,7 +506,7 @@ export function CalendarView({
                             {item.title}
                           </div>
 
-                          <div className="flex flex-wrap gap-1 pt-1">
+                          <div className="flex flex-wrap gap-1 pt-1 items-center">
                             {item.platforms.map((p) => (
                               <span
                                 key={p.platform}
@@ -503,6 +515,22 @@ export function CalendarView({
                                 {p.platform}
                               </span>
                             ))}
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border ${
+                                item.approvalStatus === "CHANGES_REQUESTED"
+                                  ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
+                                  : item.approvalStatus === "APPROVED"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                                  : item.approvalStatus === "AWAITING_APPROVAL"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900"
+                                  : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                              }`}
+                            >
+                              {item.approvalStatus === "CHANGES_REQUESTED" && "Changes Req."}
+                              {item.approvalStatus === "APPROVED" && "Approved"}
+                              {item.approvalStatus === "AWAITING_APPROVAL" && "Awaiting"}
+                              {item.approvalStatus === "DRAFT" && "Draft"}
+                            </span>
                           </div>
                         </div>
                       ))
@@ -562,7 +590,7 @@ export function CalendarView({
                       <p className="text-xs text-zinc-500 line-clamp-1">{item.caption}</p>
                     )}
 
-                    <div className="flex flex-wrap gap-1.5 pt-1">
+                    <div className="flex flex-wrap gap-1.5 pt-1 items-center">
                       {item.platforms.map((p) => (
                         <span
                           key={p.platform}
@@ -571,6 +599,22 @@ export function CalendarView({
                           {p.platform}
                         </span>
                       ))}
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                          item.approvalStatus === "CHANGES_REQUESTED"
+                            ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
+                            : item.approvalStatus === "APPROVED"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                            : item.approvalStatus === "AWAITING_APPROVAL"
+                            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900"
+                            : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                        }`}
+                      >
+                        {item.approvalStatus === "CHANGES_REQUESTED" && "Changes Requested"}
+                        {item.approvalStatus === "APPROVED" && "Approved"}
+                        {item.approvalStatus === "AWAITING_APPROVAL" && "Awaiting Approval"}
+                        {item.approvalStatus === "DRAFT" && "Draft"}
+                      </span>
                     </div>
                   </div>
 
@@ -645,7 +689,7 @@ export function CalendarView({
                         <p className="text-xs text-zinc-500 line-clamp-1">{item.caption}</p>
                       )}
 
-                      <div className="flex flex-wrap gap-1.5 pt-1">
+                      <div className="flex flex-wrap gap-1.5 pt-1 items-center">
                         {item.platforms.map((p) => (
                           <span
                             key={p.platform}
@@ -654,6 +698,22 @@ export function CalendarView({
                             {p.platform}
                           </span>
                         ))}
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                            item.approvalStatus === "CHANGES_REQUESTED"
+                              ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
+                              : item.approvalStatus === "APPROVED"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                              : item.approvalStatus === "AWAITING_APPROVAL"
+                              ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900"
+                              : "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                          }`}
+                        >
+                          {item.approvalStatus === "CHANGES_REQUESTED" && "Changes Requested"}
+                          {item.approvalStatus === "APPROVED" && "Approved"}
+                          {item.approvalStatus === "AWAITING_APPROVAL" && "Awaiting Approval"}
+                          {item.approvalStatus === "DRAFT" && "Draft"}
+                        </span>
                       </div>
                     </div>
 

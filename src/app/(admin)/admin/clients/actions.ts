@@ -8,7 +8,9 @@ import {
   createClient,
   updateClient,
   toggleClientStatus,
+  resetClientPassword,
   CreateClientResult,
+  ResetPasswordResult,
 } from "@/lib/services/client-service";
 import { OrganizationStatus } from "@prisma/client";
 import { ValidationError, AppError } from "@/lib/errors";
@@ -120,3 +122,25 @@ export async function toggleClientStatusAction(formData: FormData): Promise<void
   await toggleClientStatus(organizationId, targetStatus, session.user.id);
   revalidatePath("/admin/clients");
 }
+
+export async function resetClientPasswordAction(organizationId: string): Promise<ActionState<ResetPasswordResult>> {
+  const session = await requireAdmin();
+
+  if (!organizationId) {
+    return { success: false, error: "Missing organization ID." };
+  }
+
+  try {
+    const result = await resetClientPassword(organizationId, session.user.id);
+    revalidatePath("/admin/clients");
+    revalidatePath(`/admin/clients/${organizationId}/edit`);
+    return { success: true, data: result };
+  } catch (error) {
+    if (error instanceof AppError) {
+      return { success: false, error: error.message };
+    }
+    logger.error("Failed to reset client password", error);
+    return { success: false, error: "Failed to generate new client password." };
+  }
+}
+

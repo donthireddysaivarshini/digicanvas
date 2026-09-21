@@ -316,3 +316,96 @@ export async function toggleClientStatus(
 
   return updatedOrg;
 }
+
+export interface ResetPasswordResult {
+  organization: {
+    id: string;
+    name: string;
+  };
+  user: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  temporaryPassword: string;
+}
+
+/**
+ * Generates a new secure temporary password for a client organization's primary user,
+ * hashes and updates User.passwordHash, revokes active sessions, and logs an ActivityLog entry.
+ */
+export async function resetClientPassword(
+  organizationId: string,
+  adminUserId: string
+): Promise<ResetPasswordResult> {
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    include: {
+      users: {
+        where: { role: Role.CLIENT },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!org) {
+    throw new NotFoundError(`Client organization with ID "${organizationId}" not found.`);
+  }
+
+  const primaryUser = org.users[0];
+  if (!primaryUser) {
+    throw new NotFoundError(`No client user found for organization "${org.name}".`);
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Update password hash
+    await tx.user.update({
+      where: { id: primaryUser.id },
+      data: { passwordHash },
+    });
+
+    // 2. Invalidate all active sessions for this user
+    await tx.session.deleteMany({
+      where: { userId: primaryUser.id },
+    });
+
+    // 3. Log audit event
+    await tx.activityLog.create({
+      data: {
+        organizationId: org.id,
+        actorId: adminUserId,
+        action: "CLIENT_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: primaryUser.id,
+        metadata: {
+          organizationName: org.name,
+          userEmail: primaryUser.email,
+        },
+      },
+    });
+  });
+
+  logger.info("Client password reset by admin", {
+    organizationId: org.id,
+    userId: primaryUser.id,
+    adminUserId,
+  });
+
+  return {
+    organization: {
+      id: org.id,
+      name: org.name,
+    },
+    user: {
+      id: primaryUser.id,
+      email: primaryUser.email,
+      name: primaryUser.name,
+    },
+    temporaryPassword,
+  };
+}
+

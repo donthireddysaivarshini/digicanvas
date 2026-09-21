@@ -45,6 +45,7 @@ export async function approveContent(
   // 2. Fetch content and verify existence & active state
   const content = await prisma.content.findUnique({
     where: { id: parsed.contentId },
+    include: { organization: { select: { name: true } } },
   });
 
   if (!content || content.archivedAt !== null) {
@@ -55,6 +56,8 @@ export async function approveContent(
   if (content.organizationId !== user.organizationId) {
     throw new TenantMismatchError("You do not have permission to access or approve this content.");
   }
+
+  const orgName = content.organization?.name || user.name;
 
   // 4. Transactional approval update + Approval audit record + Activity log
   await prisma.$transaction(async (tx) => {
@@ -86,18 +89,19 @@ export async function approveContent(
         metadata: {
           title: content.title,
           approvedBy: user.name,
+          organizationName: orgName,
         },
       },
     });
 
-    // Create notification for agency/admins
+    // Create notification for agency/admins (role-specific content)
     await tx.notification.create({
       data: {
         organizationId: user.organizationId!,
         userId: null,
         type: NotificationType.APPROVED,
         title: "Content Approved",
-        message: `${user.name} approved "${content.title}".`,
+        message: `${orgName} approved "${content.title}".`,
         contentId: parsed.contentId,
         isRead: false,
       },
@@ -143,6 +147,7 @@ export async function requestChanges(
   // 2. Fetch content and verify existence & active state
   const content = await prisma.content.findUnique({
     where: { id: parsed.contentId },
+    include: { organization: { select: { name: true } } },
   });
 
   if (!content || content.archivedAt !== null) {
@@ -154,7 +159,16 @@ export async function requestChanges(
     throw new TenantMismatchError("You do not have permission to access or request changes for this content.");
   }
 
-  // 4. Transactional update + Approval history record + Activity log
+  // 4. Workflow invariant: Do NOT allow duplicate change requests while already in CHANGES_REQUESTED
+  if (content.approvalStatus === ApprovalStatus.CHANGES_REQUESTED) {
+    throw new ValidationError(
+      "Changes have already been requested for this content. Please wait for the agency to update and resubmit."
+    );
+  }
+
+  const orgName = content.organization?.name || user.name;
+
+  // 5. Transactional update + Approval history record + Activity log + Admin notification
   await prisma.$transaction(async (tx) => {
     await tx.content.update({
       where: { id: parsed.contentId },
@@ -185,18 +199,19 @@ export async function requestChanges(
           title: content.title,
           notes: trimmedNotes,
           requestedBy: user.name,
+          organizationName: orgName,
         },
       },
     });
 
-    // Create notification for agency/admins
+    // Create notification for agency/admins (role-specific content)
     await tx.notification.create({
       data: {
         organizationId: user.organizationId!,
         userId: null,
         type: NotificationType.CHANGES_REQUESTED,
         title: "Changes Requested",
-        message: `${user.name} requested changes on "${content.title}": "${trimmedNotes}"`,
+        message: `${orgName} requested changes on "${content.title}": "${trimmedNotes}"`,
         contentId: parsed.contentId,
         isRead: false,
       },
@@ -238,6 +253,7 @@ export async function updateCaptionByClient(
   const content = await prisma.content.findUnique({
     where: { id: parsed.contentId },
     include: {
+      organization: { select: { name: true } },
       captionVersions: {
         orderBy: { versionNumber: "desc" },
         take: 1,
@@ -264,6 +280,8 @@ export async function updateCaptionByClient(
     });
     return await getContentById(parsed.contentId, user);
   }
+
+  const orgName = content.organization?.name || user.name;
 
   // 4. Transactional caption version increment + content update + activity log + notification
   const latestVersionNumber = content.captionVersions[0]?.versionNumber ?? 0;
@@ -301,18 +319,19 @@ export async function updateCaptionByClient(
           title: content.title,
           versionNumber: nextVersionNumber,
           editedBy: user.name,
+          organizationName: orgName,
         },
       },
     });
 
-    // Create notification for agency/admins
+    // Create notification for agency/admins (role-specific content; client does not receive self-notification)
     await tx.notification.create({
       data: {
         organizationId: user.organizationId!,
         userId: null,
         type: NotificationType.INFO,
         title: "Caption Updated by Client",
-        message: `${user.name} updated the caption for "${content.title}" (version ${nextVersionNumber}).`,
+        message: `${orgName} updated the caption for "${content.title}" (version ${nextVersionNumber}).`,
         contentId: parsed.contentId,
         isRead: false,
       },
@@ -330,7 +349,7 @@ export async function updateCaptionByClient(
 
 /**
  * Admin workflow: Submits or resubmits content for client review (moves to AWAITING_APPROVAL).
- * Used when content is DRAFT or after changes were requested and resolved.
+ * This is the SINGLE authoritative workflow for DRAFT -> AWAITING_APPROVAL and CHANGES_REQUESTED -> AWAITING_APPROVAL.
  */
 export async function submitForApproval(
   input: SubmitForApprovalInput,
@@ -354,6 +373,13 @@ export async function submitForApproval(
   // Verify admin has access if scoped
   assertOrganizationAccess(content.organizationId, user);
 
+  const wasChangesRequested = content.approvalStatus === ApprovalStatus.CHANGES_REQUESTED;
+  const actionName = wasChangesRequested ? "CONTENT_RESUBMITTED" : "CONTENT_SUBMITTED_FOR_APPROVAL";
+  const notifTitle = wasChangesRequested ? "Content Resubmitted" : "Content Ready for Review";
+  const notifMessage = wasChangesRequested
+    ? `We've updated "${content.title}" based on your requested changes.`
+    : `"${content.title}" is ready for your review and approval.`;
+
   await prisma.$transaction(async (tx) => {
     await tx.content.update({
       where: { id: parsed.contentId },
@@ -367,34 +393,37 @@ export async function submitForApproval(
       data: {
         organizationId: content.organizationId,
         actorId: user.id,
-        action: "CONTENT_SUBMITTED_FOR_APPROVAL",
+        action: actionName,
         entityType: "CONTENT",
         entityId: parsed.contentId,
         metadata: {
           title: content.title,
           previousStatus: content.approvalStatus,
+          resubmittedBy: user.name,
         },
       },
     });
 
-    // Create notification for the client organization
+    // Create role-specific notification for the client organization
     await tx.notification.create({
       data: {
         organizationId: content.organizationId,
         userId: null,
         type: NotificationType.APPROVAL_REQUIRED,
-        title: "Content Ready for Review",
-        message: `Content "${content.title}" is ready for your review and approval.`,
+        title: notifTitle,
+        message: notifMessage,
         contentId: parsed.contentId,
         isRead: false,
       },
     });
   });
 
-  logger.info("Content submitted for approval by admin", {
+  logger.info("Content submitted/resubmitted for approval by admin", {
     contentId: parsed.contentId,
     adminId: user.id,
+    wasChangesRequested,
   });
 
   return await getContentById(parsed.contentId, user);
 }
+

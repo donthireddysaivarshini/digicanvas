@@ -160,6 +160,7 @@ model Content {
   @@index([organizationId, approvalStatus])
   @@index([organizationId, publishingStatus])
   @@index([organizationId, archivedAt])
+  @@index([organizationId, archivedAt, scheduledAt])
   @@index([contentType])
 }
 
@@ -220,6 +221,7 @@ model Notification {
 
   @@index([organizationId, isRead])
   @@index([userId, isRead])
+  @@index([organizationId, isRead, createdAt])
 }
 
 model ActivityLog {

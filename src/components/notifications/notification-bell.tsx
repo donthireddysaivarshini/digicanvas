@@ -106,25 +106,32 @@ export function NotificationBell({ isAdmin = false }: NotificationBellProps) {
   // Mark single as read
   const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    // Optimistic instant UI update
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
     try {
       await markNotificationAsReadAction(id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (err) {
       console.error("Failed to mark as read", err);
+      fetchNotifications();
     }
   };
 
   // Mark all as read
   const handleMarkAllAsRead = async () => {
+    const previousNotifications = notifications;
+    const previousCount = unreadCount;
+    // Optimistic instant UI update
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setUnreadCount(0);
     try {
       await markAllNotificationsAsReadAction();
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
     } catch (err) {
       console.error("Failed to mark all as read", err);
+      setNotifications(previousNotifications);
+      setUnreadCount(previousCount);
     }
   };
 
